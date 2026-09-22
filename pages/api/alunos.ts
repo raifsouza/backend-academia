@@ -4,22 +4,57 @@ import bcrypt from 'bcryptjs';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // --- BUSCAR USUÁRIOS ---
+  // --- BUSCAR USUÁRIOS / ALUNOS ---
   if (req.method === 'GET') {
     try {
-      // Busca apenas os usuários do tipo Aluno (tipo_usuario = 3)
-      const [rows] = await db.query(
-        `SELECT id, nome, matricula, telefone, tipo_usuario 
-         FROM usuarios 
-         WHERE tipo_usuario = 3 
-         ORDER BY nome ASC`
-      );
+      const query = `
+        SELECT 
+          u.id,
+          u.nome,
+          u.email,
+          u.telefone,
+          u.foto_url,
+          u.matricula,
+          u.data_vencimento,
+          u.agendar_aula_experimental,
+          u.aula_experimental_realizada,
+          'Power Member' AS plano, -- Caso tenha a coluna plano na tabela usuarios, substitua por u.plano
 
+          -- 1. AVALIAÇÃO FÍSICA: Detecta automaticamente se existe registro na tabela avaliacao_fisica
+          IF(EXISTS(SELECT 1 FROM avaliacao_fisica af WHERE af.aluno_id = u.id), 1, 0) AS realizou_avaliacao,
+
+          -- 2. AULA EXPERIMENTAL: 1 se foi marcada manualmente OU se a data agendada já passou
+          IF(
+            u.aula_experimental_realizada = 1 OR 
+            (u.agendar_aula_experimental IS NOT NULL AND u.agendar_aula_experimental < NOW()), 
+            1, 
+            0
+          ) AS status_aula_experimental,
+
+          -- 3. STATUS ALUNO (ATIVO / INATIVO):
+          -- Considera INATIVO se houver fatura PENDENTE com data de vencimento que já passou
+          IF(
+            EXISTS(
+              SELECT 1 FROM pagamentos p 
+              WHERE p.usuario_id = u.id 
+                AND p.status = 'PENDENTE' 
+                AND p.data_pagamento < CURDATE()
+            ),
+            'INATIVO',
+            'ATIVO'
+          ) AS status_aluno
+
+        FROM usuarios u
+        WHERE u.tipo_usuario = 3 
+        ORDER BY u.nome ASC
+      `;
+
+      const [rows] = await db.query(query);
       return res.status(200).json(rows);
     } catch (error) {
       console.error('Erro ao buscar alunos:', error);
@@ -49,7 +84,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       // 1. Gerar Matrícula: 1ª Letra do nome + 5 últimos dígitos do telefone
       const primeiraLetra = nome.trim().charAt(0).toUpperCase();
-      const apenasNumerosTelefone = telefone.replace(/\D/g, ''); // Remove traços/parênteses/espaços
+      const apenasNumerosTelefone = telefone.replace(/\D/g, ''); 
       const ultimos5Digitos = apenasNumerosTelefone.slice(-5);
       const matriculaGerada = `${primeiraLetra}${ultimos5Digitos}`;
 
@@ -80,7 +115,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       
       const [result] = await db.query(query, values);
       
-      // Retorna a matrícula gerada no JSON de resposta
       return res.status(201).json({ 
         message: 'Cadastro realizado com sucesso!', 
         id: (result as any).insertId,
@@ -98,5 +132,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
 
-  res.status(405).json({ error: 'Método não permitido' });
+  // --- ATUALIZAR STATUS MANUAL DA AULA EXPERIMENTAL (PUT) ---
+  if (req.method === 'PUT') {
+    const { aluno_id, aula_experimental_realizada } = req.body;
+
+    try {
+      await db.query(
+        'UPDATE usuarios SET aula_experimental_realizada = ? WHERE id = ?',
+        [aula_experimental_realizada ? 1 : 0, aluno_id]
+      );
+      return res.status(200).json({ message: 'Status da aula experimental atualizado com sucesso!' });
+    } catch (error) {
+      console.error('Erro ao atualizar aula experimental:', error);
+      return res.status(500).json({ error: 'Erro ao atualizar aluno' });
+    }
+  }
+
+  return res.status(405).json({ error: 'Método não permitido' });
 }
