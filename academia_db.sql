@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Tempo de geração: 28/08/2026 às 19:46
+-- Tempo de geração: 23/09/2026 às 19:40
 -- Versão do servidor: 10.4.32-MariaDB
 -- Versão do PHP: 8.2.12
 
@@ -160,6 +160,24 @@ CREATE TABLE `avaliacao_risco_coronariano` (
 -- --------------------------------------------------------
 
 --
+-- Estrutura para tabela `exercicios`
+--
+
+CREATE TABLE `exercicios` (
+  `id` int(11) NOT NULL,
+  `treino_id` int(11) NOT NULL,
+  `nome` varchar(150) NOT NULL,
+  `grupo_muscular` varchar(50) DEFAULT 'Geral',
+  `series` int(11) NOT NULL DEFAULT 3,
+  `repeticoes` varchar(50) NOT NULL,
+  `carga_kg` decimal(5,2) DEFAULT 0.00,
+  `descanso_segundos` int(11) DEFAULT 60,
+  `concluido` tinyint(1) DEFAULT 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Estrutura para tabela `pagamentos`
 --
 
@@ -169,8 +187,23 @@ CREATE TABLE `pagamentos` (
   `valor` decimal(10,2) NOT NULL,
   `data_pagamento` date NOT NULL,
   `status` enum('PAGO','PENDENTE','CANCELADO') NOT NULL DEFAULT 'PENDENTE',
-  `mes_referencia` varchar(20) NOT NULL,
+  `mes_referencia` varchar(100) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Estrutura para tabela `produtos`
+--
+
+CREATE TABLE `produtos` (
+  `id` int(11) NOT NULL,
+  `nome` varchar(150) NOT NULL,
+  `preco` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `estoque` int(11) NOT NULL DEFAULT 0,
+  `created_at` datetime DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -207,7 +240,24 @@ CREATE TABLE `usuarios` (
   `data_vencimento` date NOT NULL,
   `agendar_aula_experimental` datetime DEFAULT NULL,
   `realizou_avaliacao` tinyint(1) DEFAULT 0,
-  `tipo_usuario` tinyint(4) NOT NULL DEFAULT 3 COMMENT '1: Admin, 2: Professor, 3: Aluno'
+  `tipo_usuario` tinyint(4) NOT NULL DEFAULT 3 COMMENT '1: Admin, 2: Professor, 3: Aluno',
+  `aula_experimental_realizada` tinyint(1) DEFAULT 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Estrutura para tabela `vendas`
+--
+
+CREATE TABLE `vendas` (
+  `id` int(11) NOT NULL,
+  `produto_id` int(11) NOT NULL,
+  `quantidade` int(11) NOT NULL,
+  `valor_total` decimal(10,2) NOT NULL,
+  `vendedor_id` int(11) NOT NULL,
+  `metodo_pagamento` enum('DINHEIRO','DEBITO','PIX','CREDITO') NOT NULL DEFAULT 'PIX',
+  `data_venda` datetime DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
@@ -271,11 +321,24 @@ ALTER TABLE `avaliacao_risco_coronariano`
   ADD UNIQUE KEY `avaliacao_id_2` (`avaliacao_id`);
 
 --
+-- Índices de tabela `exercicios`
+--
+ALTER TABLE `exercicios`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `treino_id` (`treino_id`);
+
+--
 -- Índices de tabela `pagamentos`
 --
 ALTER TABLE `pagamentos`
   ADD PRIMARY KEY (`id`),
   ADD KEY `usuario_id` (`usuario_id`);
+
+--
+-- Índices de tabela `produtos`
+--
+ALTER TABLE `produtos`
+  ADD PRIMARY KEY (`id`);
 
 --
 -- Índices de tabela `treinos`
@@ -290,6 +353,14 @@ ALTER TABLE `treinos`
 ALTER TABLE `usuarios`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `email` (`email`);
+
+--
+-- Índices de tabela `vendas`
+--
+ALTER TABLE `vendas`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `produto_id` (`produto_id`),
+  ADD KEY `vendedor_id` (`vendedor_id`);
 
 --
 -- AUTO_INCREMENT para tabelas despejadas
@@ -338,9 +409,21 @@ ALTER TABLE `avaliacao_risco_coronariano`
   MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT;
 
 --
+-- AUTO_INCREMENT de tabela `exercicios`
+--
+ALTER TABLE `exercicios`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT de tabela `pagamentos`
 --
 ALTER TABLE `pagamentos`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT de tabela `produtos`
+--
+ALTER TABLE `produtos`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
@@ -353,6 +436,12 @@ ALTER TABLE `treinos`
 -- AUTO_INCREMENT de tabela `usuarios`
 --
 ALTER TABLE `usuarios`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT de tabela `vendas`
+--
+ALTER TABLE `vendas`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
@@ -396,6 +485,12 @@ ALTER TABLE `avaliacao_risco_coronariano`
   ADD CONSTRAINT `fk_risco_avaliacao` FOREIGN KEY (`avaliacao_id`) REFERENCES `avaliacao_fisica` (`id`) ON DELETE CASCADE;
 
 --
+-- Restrições para tabelas `exercicios`
+--
+ALTER TABLE `exercicios`
+  ADD CONSTRAINT `exercicios_ibfk_1` FOREIGN KEY (`treino_id`) REFERENCES `treinos` (`id`) ON DELETE CASCADE;
+
+--
 -- Restrições para tabelas `pagamentos`
 --
 ALTER TABLE `pagamentos`
@@ -406,6 +501,13 @@ ALTER TABLE `pagamentos`
 --
 ALTER TABLE `treinos`
   ADD CONSTRAINT `treinos_ibfk_1` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE;
+
+--
+-- Restrições para tabelas `vendas`
+--
+ALTER TABLE `vendas`
+  ADD CONSTRAINT `vendas_ibfk_1` FOREIGN KEY (`produto_id`) REFERENCES `produtos` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `vendas_ibfk_2` FOREIGN KEY (`vendedor_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
