@@ -19,6 +19,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'O id do usuário é obrigatório.' });
     }
 
+
+    // CONVERSÃO PARA INT
+    const userIdNum = parseInt(usuario_id as string, 10);
+
+    if (isNaN(userIdNum)) {
+      return res.status(400).json({ error: 'ID do usuário inválido.' });
+    }
+
+
     try {
       // 1. Busca os treinos do usuário
       const [treinos]: any = await db.query(
@@ -26,7 +35,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
          FROM treinos 
          WHERE usuario_id = ? 
          ORDER BY id DESC`,
-        [usuario_id]
+        [userIdNum]
       );
 
       // 2. Para cada treino encontrado, busca seus respectivos exercícios
