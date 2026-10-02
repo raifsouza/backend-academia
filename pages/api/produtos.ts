@@ -16,7 +16,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           id, 
           nome, 
           preco, 
-          estoque 
+          estoque,
+          categoria
         FROM produtos 
         ORDER BY nome ASC
       `;
@@ -31,22 +32,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // --- CADASTRAR NOVO PRODUTO (ADMIN) ---
   if (req.method === 'POST') {
-    const { nome, preco, estoque } = req.body;
+    const { nome, preco, estoque, categoria } = req.body;
 
-    if (!nome || preco == null || estoque == null) {
-      return res.status(400).json({ error: 'Nome, preço e quantidade em estoque são obrigatórios.' });
+    if (!nome || preco == null || estoque == null || !categoria) {
+      return res.status(400).json({ error: 'Nome, preço, quantidade em estoque e categoria são obrigatórios.' });
+    }
+
+    const categoriaFormatada = categoria.toUpperCase();
+    if (!['FREEZER', 'SUPLEMENTO'].includes(categoriaFormatada)) {
+      return res.status(400).json({ error: 'Categoria inválida. Use FREEZER ou SUPLEMENTO.' });
     }
 
     try {
       const query = `
-        INSERT INTO produtos (nome, preco, estoque) 
-        VALUES (?, ?, ?)
+        INSERT INTO produtos (nome, preco, estoque, categoria) 
+        VALUES (?, ?, ?, ?)
       `;
 
       const values = [
         nome, 
         parseFloat(preco), 
-        parseInt(estoque, 10)
+        parseInt(estoque, 10),
+        categoriaFormatada
       ];
 
       const [result] = await db.query(query, values);
@@ -56,7 +63,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         id: (result as any).insertId,
         nome,
         preco,
-        estoque
+        estoque,
+        categoria: categoriaFormatada
       });
     } catch (error: any) {
       console.error('Erro ao cadastrar produto:', error);

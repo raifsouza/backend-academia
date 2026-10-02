@@ -15,6 +15,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         SELECT 
           v.id,
           p.nome AS produto_nome,
+          p.categoria AS produto_categoria,
           v.quantidade,
           v.valor_total,
           v.metodo_pagamento,

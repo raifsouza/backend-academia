@@ -1,23 +1,26 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { db } from '../../lib/db'; // Ajuste conforme seu caminho de conexão MySQL
+import { db } from '../../lib/db';
+import { enviarNotificacaoPush } from '../../lib/firebaseAdmin';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
+  );
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
-if (req.method === 'GET') {
+  if (req.method === 'GET') {
     const { usuario_id } = req.query;
 
     try {
-      // VISÃO DO ALUNO: Quando um ID específico é informado
       if (usuario_id) {
         const [users]: any = await db.query(
-          'SELECT id, nome, data_vencimento FROM usuarios WHERE id = ?',
+          'SELECT id, nome, data_vencimento, fcm_token FROM usuarios WHERE id = ?',
           [usuario_id]
         );
 
@@ -32,7 +35,6 @@ if (req.method === 'GET') {
           const mesAtual = hojeInicio.getMonth();
 
           const dataVencimentoMes = new Date(anoAtual, mesAtual, diaVencimento);
-
           const diffEmMs = dataVencimentoMes.getTime() - hojeInicio.getTime();
           const diasAteVencimento = Math.ceil(diffEmMs / (1000 * 60 * 60 * 24));
 
@@ -43,7 +45,6 @@ if (req.method === 'GET') {
             ];
             
             const mesReferenciaAtual = `${mesesNomes[mesAtual]} ${anoAtual}`;
-
             const yyyy = dataVencimentoMes.getFullYear();
             const mm = String(dataVencimentoMes.getMonth() + 1).padStart(2, '0');
             const dd = String(dataVencimentoMes.getDate()).padStart(2, '0');
@@ -63,6 +64,15 @@ if (req.method === 'GET') {
                  VALUES (?, ?, ?, ?, ?)`,
                 [usuario_id, 80.00, dataVencStr, 'PENDENTE', mesReferenciaAtual]
               );
+
+              // --- NOTIFICAÇÃO DE COBRANÇA GERADA ---
+              if (user.fcm_token) {
+                await enviarNotificacaoPush(
+                  user.fcm_token,
+                  '💳 Mensalidade Disponível',
+                  `Sua mensalidade de ${mesReferenciaAtual} foi gerada. Vencimento: ${dd}/${mm}/${yyyy}.`
+                );
+              }
             }
           }
         }
@@ -79,7 +89,6 @@ if (req.method === 'GET') {
         return res.status(200).json(rows);
       } 
       
-      // VISÃO DO ADMIN: Quando usuario_id NÃO é informado (Busca todos os alunos)
       const [rows] = await db.query(
         `SELECT p.id, p.usuario_id, u.nome as aluno_nome, p.valor, 
                 DATE_FORMAT(p.data_pagamento, '%Y-%m-%d') as data_pagamento, 
@@ -96,7 +105,6 @@ if (req.method === 'GET') {
     }
   }
 
-  // --- 2. REQUISIÇÕES POST / PUT ---
   if (req.method === 'POST') {
     const { id, usuario_id, valor, data_pagamento, status, mes_referencia } = req.body;
 
@@ -115,6 +123,16 @@ if (req.method === 'GET') {
         [usuario_id, valor, data_pagamento, status || 'PAGO', mes_referencia]
       );
 
+      // Envia notificação para o aluno quando o admin gera cobrança manual
+      const [userRows]: any = await db.query('SELECT fcm_token FROM usuarios WHERE id = ?', [usuario_id]);
+      if (userRows.length > 0 && userRows[0].fcm_token) {
+        await enviarNotificacaoPush(
+          userRows[0].fcm_token,
+          '💳 Fatura Registrada',
+          `Uma nova cobrança no valor de R$ ${valor} foi registrada.`
+        );
+      }
+
       return res.status(201).json({ message: 'Pagamento registrado com sucesso!', id: result.insertId });
     } catch (error) {
       console.error('Erro ao salvar pagamento:', error);
@@ -122,6 +140,5 @@ if (req.method === 'GET') {
     }
   }
 
-  // Retorna 405 APENAS se tentarem métodos como DELETE ou PATCH não tratados
   return res.status(405).json({ error: 'Método não permitido' });
 }
