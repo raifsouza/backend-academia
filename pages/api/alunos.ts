@@ -3,13 +3,17 @@ import { db } from '../../lib/db';
 import bcrypt from 'bcryptjs';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Configuração Global do CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  // Trata requisições Preflight (CORS)
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
 
-  // --- BUSCAR USUÁRIOS / ALUNOS ---
+  // --- BUSCAR USUÁRIOS / ALUNOS (GET) ---
   if (req.method === 'GET') {
     try {
       const query = `
@@ -23,12 +27,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           u.data_vencimento,
           u.agendar_aula_experimental,
           u.aula_experimental_realizada,
-          'Power Member' AS plano, -- Caso tenha a coluna plano na tabela usuarios, substitua por u.plano
+          'Power Member' AS plano,
 
-          -- 1. AVALIAÇÃO FÍSICA: Detecta automaticamente se existe registro na tabela avaliacao_fisica
           IF(EXISTS(SELECT 1 FROM avaliacao_fisica af WHERE af.aluno_id = u.id), 1, 0) AS realizou_avaliacao,
 
-          -- 2. AULA EXPERIMENTAL: 1 se foi marcada manualmente OU se a data agendada já passou
           IF(
             u.aula_experimental_realizada = 1 OR 
             (u.agendar_aula_experimental IS NOT NULL AND u.agendar_aula_experimental < NOW()), 
@@ -36,8 +38,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             0
           ) AS status_aula_experimental,
 
-          -- 3. STATUS ALUNO (ATIVO / INATIVO):
-          -- Considera INATIVO se houver fatura PENDENTE com data de vencimento que já passou
           IF(
             EXISTS(
               SELECT 1 FROM pagamentos p 
@@ -62,7 +62,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
 
-  // --- CADASTRAR USUÁRIO ---
+  // --- CADASTRAR USUÁRIO (POST) ---
   if (req.method === 'POST') {
     const { 
       nome, 
@@ -115,6 +115,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       
       const [result] = await db.query(query, values);
       
+      // O return abaixo encerra o fluxo e evita que caia no status 405
       return res.status(201).json({ 
         message: 'Cadastro realizado com sucesso!', 
         id: (result as any).insertId,
@@ -148,5 +149,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
 
+  // Se nenhum método (GET, POST, PUT, OPTIONS) bater, aí sim retorna 405
   return res.status(405).json({ error: 'Método não permitido' });
 }
